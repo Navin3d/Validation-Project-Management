@@ -1,7 +1,6 @@
 tittle,description,projectId,assignedTo,deadline,comments
-,,,,,
-Weather Forecasting Application,utilize historical and real-time weather data to offer accurate forecasts and present the most relevant weather,10,5,09/09/2023,Accuracy needs to be improved || Documentation must be expanded 
+Weather Forecasting Application,utilize historical and real-time weather data to offer accurate forecasts and present the most relevant weather,10,5,2024-09-09,Accuracy needs to be improved || Documentation must be expanded 
 Detecting Brain Tumors and Alzheimer’s Using Python,increase the quality and sensitivity of imaging in the early diagnosis of illnesses ranging from brain tumors to Alzheimer’s disease.,11,3,2023-16-09,The user interface is intuitive || expand the dataset
 Blockchain Based Crowdfunding Platform,increased security in crowdfunding platforms,12,2,2023-22-09,safeguard user data and transactions further || implement user feedback mechanisms
 Waste Food Management & Donation App,"To reduce restaurant food wastage by giving waste food to NGOs. NGOs will raise a request, in case of any leftover food restaurants have.",13,1,2023-28-09,implement features for tracking food donations || Documentation must be enriched
-Real Estate Booking System using Smart Contracts,minimize the need for third-party involvement.,14,4,10/01/2023,improve user interface || update property availability
+Real Estate Booking System using Smart Contracts,minimize the need for third-party involvement.,14,4,2024-09-09,improve user interface || update property availability

@@ -24,7 +24,7 @@ def read_root() -> dict:
 
 
 @app.post("/uploadfile/")
-async def upload_file(files: List[UploadFile] = File(...)) -> list:
+async def upload_file(files: List[UploadFile] = File(...)):
     parsed: list = []
     developer_file = filter_file(files, "developer")
     project_file = filter_file(files, "project")
@@ -66,9 +66,25 @@ async def upload_file(files: List[UploadFile] = File(...)) -> list:
     #     elif ".xlxs" in file_name:
     #         parsed(await handle_excel(file))
 
+    # Serialize the data into Pydantic models
+    # user_validation_result = UserValidationResult(**parsed[0])
+    # project_validation_result = ProjectValidationResult(**parsed[1])
+    # task_validation_result = TaskValidationResult(**parsed[2])
+    
+    # # Create ValidationResults object
+    # validation_results = ValidationResults(
+    #     userValidationResult=user_validation_result,
+    #     projectValidationResult=project_validation_result,
+    #     taskValidationResult=task_validation_result
+    # )
     
     return jsonable_encoder(parsed)
 
+
+def return_list_ifempty(df):
+    if df.empty:
+        return []
+    return df.to_dict(orient='records')
 
 def filter_file(files, file_expected):
     for file in files:
@@ -107,8 +123,13 @@ async def handle_excel(exce_file):
 
 def handle_developer(developer_dataframe) -> dict:
     is_valid = True
-    null_rows = developer_dataframe[developer_dataframe.isnull().any(axis=1)]
-    dict_converted = developer_dataframe.to_dict(orient="records")
+    developer_dataframe_cleaned = developer_dataframe.where(pd.notnull(developer_dataframe), None)    
+    # Get rows with null values
+    null_rows = developer_dataframe_cleaned[developer_dataframe_cleaned.isnull().any(axis=1)]    
+    # Exclude the first row
+    null_rows = null_rows[null_rows.index != 1]
+    dict_converted = developer_dataframe.where(pd.notnull(developer_dataframe), "null").to_dict(orient="records")
+
     invalid_emails = validate_email(dict_converted)
     duplicate_emails = developer_dataframe[developer_dataframe['email'].duplicated(keep=False)]
     duplicate_user_ids = developer_dataframe[developer_dataframe['id'].duplicated(keep=False)]
@@ -117,27 +138,29 @@ def handle_developer(developer_dataframe) -> dict:
     return {
         "isDeveloperValid": is_valid,
         "invalidEmails": invalid_emails,
-        "nullRows": null_rows,
-        "duplicateEmailEntry": duplicate_emails,
-        "duplicateIdEntry": duplicate_user_ids
+        "nullRows": return_list_ifempty(null_rows),
+        "duplicateEmailEntry": return_list_ifempty(duplicate_emails),
+        "duplicateIdEntry": return_list_ifempty(duplicate_user_ids)
     }
 
 def handle_project(project_dataframe):
     is_valid = True
     null_rows = project_dataframe[project_dataframe.isnull().any(axis=1)]
+    null_rows = null_rows[null_rows.index != 1]
     duplicate_project_ids = project_dataframe[project_dataframe['id'].duplicated(keep=False)]
     if len(null_rows) > 0 or len(duplicate_project_ids) > 0:
         is_valid = False
     return {
         "isProjectValid": is_valid,
-        "nullRows": null_rows,
-        "duplicateIdEntry": duplicate_project_ids
+        "nullRows": return_list_ifempty(null_rows),
+        "duplicateIdEntry": return_list_ifempty(duplicate_project_ids)
     }
 
 def handle_task(task_dataframe, project_dataframe, developer_dataframe):
     is_valid = True
     today_date = datetime.now().date()
     null_rows = project_dataframe[project_dataframe.isnull().any(axis=1)]
+    null_rows = null_rows[null_rows.index != 1]
     missing_project_ids = task_dataframe[~task_dataframe['projectId'].isin(project_dataframe['id'])]
     missing_assigned_to = task_dataframe[~task_dataframe['assignedTo'].isin(developer_dataframe['id'])]        
     # invalid_deadlines = task_dataframe[~pd.to_datetime(task_dataframe['deadline'], errors='coerce').dt.date.isnull() & (pd.to_datetime(task_dataframe['deadline']) < today_date)]
@@ -172,15 +195,14 @@ def handle_task(task_dataframe, project_dataframe, developer_dataframe):
         is_valid = False
     return {
         "isTaskValid": is_valid,
-        "nullRows": null_rows,
-        "missingProjects": missing_project_ids,
-        "missingDevelopers": missing_assigned_to,
+        "nullRows": return_list_ifempty(null_rows),
+        "missingProjects": return_list_ifempty(missing_project_ids),
+        "missingDevelopers": return_list_ifempty(missing_assigned_to),
         "invalidDeadlines": invalid_deadlines,
         "inValidAssignment": invalid_assigned_to
     }
 
-def validate_email(objects) -> list:
-    print(objects)
+def validate_email(objects):
     invalid_emails = []
     for obj in objects:
         for key, value in obj.items():
@@ -188,9 +210,9 @@ def validate_email(objects) -> list:
                 if value != value:
                     invalid_emails.append(value)
                 else:
-                    print(value)
+                    # print(value)
                     if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', value):
-                        invalid_emails.append(value)
+                        invalid_emails.append({ "id": obj["id"], "email": value })
     return invalid_emails
 
 
