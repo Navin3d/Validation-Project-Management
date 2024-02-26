@@ -47,9 +47,13 @@ async def upload_file(bactchId: str):
        shutil.rmtree(batch_path)
     return True
 
+def return_list_ifempty(df):
+    if df.empty:
+        return []
+    return df.to_dict(orient='records')
 
 @app.get("/process-batch/{bactchId}/")
-async def proces_batch(bactchId: str):
+async def proces_batch(bactchId: str) -> dict:
     batch_path = FILE_BASEPATH + bactchId
 
     parsed: list = []
@@ -60,17 +64,17 @@ async def proces_batch(bactchId: str):
     project_df = []
     developer_df = []
     task_df = []
-    if ".xlxs" in project_file:
+    if ".xlsx" in project_file:
         project_df = await excel_to_df(project_file)
     else:
         project_df = await csv_to_df(project_file)
 
-    if ".xlxs" in developer_file:
+    if ".xlsx" in developer_file:
         developer_df = await excel_to_df(developer_file)
     else:
         developer_df = await csv_to_df(developer_file)
 
-    if ".xlxs" in task_file:
+    if ".xlsx" in task_file:
         task_df = await excel_to_df(task_file)
     else:
         task_df = await csv_to_df(task_file)
@@ -78,14 +82,25 @@ async def proces_batch(bactchId: str):
     parsed.append(handle_developer(developer_df))
     parsed.append(handle_project(project_df))
     parsed.append(handle_task(task_df, project_df, developer_df))
+
+    returnValue = {
+        "isValid": True,
+        "errors": parsed
+    }
+
+    if parsed[0]['isDeveloperValid'] == False or parsed[1]['isProjectValid'] == False or parsed[2]['isTaskValid'] == False:
+        returnValue["isValid"] = False
+
+    if returnValue["isValid"] == True:
+        returnValue["data"] = {
+            "developer": return_list_ifempty(developer_df),
+            "project": return_list_ifempty(project_df),
+            "task": return_list_ifempty(task_df),
+        }
+        returnValue.pop("errors")
     
-    return jsonable_encoder(parsed)
+    return jsonable_encoder(returnValue)
 
-
-def return_list_ifempty(df):
-    if df.empty:
-        return []
-    return df.to_dict(orient='records')
 
 def filter_file(folder_path, file_name):
     for file in os.listdir(folder_path):
