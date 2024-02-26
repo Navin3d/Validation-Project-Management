@@ -1,12 +1,9 @@
 from fastapi import FastAPI, File, UploadFile
-import uvicorn
+import uvicorn, re, pathlib, os, shutil
 import pandas as pd
-from io import BytesIO
-from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from datetime import datetime
-import re
 
 
 app = FastAPI()
@@ -18,32 +15,62 @@ app.add_middleware(
     allow_headers=['*']
     )
 
+FILE_BASEPATH: str = os.path.join(pathlib.Path().resolve(), "files/prod/")
+
+
 @app.get("/")
 def read_root() -> dict:
     return {"status": "App running in port 8000"}
 
 
-@app.post("/uploadfile/")
-async def upload_file(files: List[UploadFile] = File(...)):
+@app.post("/uploadfile/{bactchId}/")
+async def upload_file(bactchId: str, files: UploadFile = File(...)):
+    batch_path = FILE_BASEPATH + bactchId
+    if(not os.path.isdir(batch_path)):
+       os.mkdir(batch_path)
+    path = os.path.join(batch_path, files.filename)
+    try:
+        contents = await files.read()
+        with open(path, 'wb') as f:
+            f.write(contents)
+    except Exception as e:
+        print(e)
+        return False
+    finally:
+        files.close()
+    return True
+
+@app.get("/clearbatch/{bactchId}/")
+async def upload_file(bactchId: str):
+    batch_path = FILE_BASEPATH + bactchId
+    if os.path.isdir(batch_path):
+       shutil.rmtree(batch_path)
+    return True
+
+
+@app.get("/process-batch/{bactchId}/")
+async def proces_batch(bactchId: str):
+    batch_path = FILE_BASEPATH + bactchId
+
     parsed: list = []
-    developer_file = filter_file(files, "developer")
-    project_file = filter_file(files, "project")
-    task_file = filter_file(files, "task")
+    developer_file = filter_file(batch_path, "developer")
+    project_file = filter_file(batch_path, "project")
+    task_file = filter_file(batch_path, "task")
 
     project_df = []
     developer_df = []
     task_df = []
-    if ".xlxs" in project_file.filename:
+    if ".xlxs" in project_file:
         project_df = await excel_to_df(project_file)
     else:
         project_df = await csv_to_df(project_file)
 
-    if ".xlxs" in developer_file.filename:
+    if ".xlxs" in developer_file:
         developer_df = await excel_to_df(developer_file)
     else:
         developer_df = await csv_to_df(developer_file)
 
-    if ".xlxs" in task_file.filename:
+    if ".xlxs" in task_file:
         task_df = await excel_to_df(task_file)
     else:
         task_df = await csv_to_df(task_file)
@@ -51,32 +78,6 @@ async def upload_file(files: List[UploadFile] = File(...)):
     parsed.append(handle_developer(developer_df))
     parsed.append(handle_project(project_df))
     parsed.append(handle_task(task_df, project_df, developer_df))
-    
-
-    # for file in files:
-    #     file_name = file.filename
-
-    #     if "developer" in file_name:
-    #         return handle_developer(dataframe)
-    #     elif "project" in file_name:
-    #         return handle_project(dataframe)
-
-    #     if ".csv" in file_name:
-    #         parsed.append(await handle_csv(file))
-    #     elif ".xlxs" in file_name:
-    #         parsed(await handle_excel(file))
-
-    # Serialize the data into Pydantic models
-    # user_validation_result = UserValidationResult(**parsed[0])
-    # project_validation_result = ProjectValidationResult(**parsed[1])
-    # task_validation_result = TaskValidationResult(**parsed[2])
-    
-    # # Create ValidationResults object
-    # validation_results = ValidationResults(
-    #     userValidationResult=user_validation_result,
-    #     projectValidationResult=project_validation_result,
-    #     taskValidationResult=task_validation_result
-    # )
     
     return jsonable_encoder(parsed)
 
@@ -86,18 +87,18 @@ def return_list_ifempty(df):
         return []
     return df.to_dict(orient='records')
 
-def filter_file(files, file_expected):
-    for file in files:
-        if file_expected in file.filename:
-            return file
+def filter_file(folder_path, file_name):
+    for file in os.listdir(folder_path):
+        print(file)
+        if file_name in file:
+            return os.path.join(folder_path, file)
+    return None
 
 async def csv_to_df(csv_file):
-    contents = await csv_file.read()
-    return pd.read_csv(BytesIO(contents))
+    return pd.read_csv(csv_file)
 
 async def excel_to_df(excel_file):
-    contents = await excel_file.read()
-    return pd.read_excel(BytesIO(contents))
+    return pd.read_excel(excel_file)
 
 async def handle_csv(csv_file):
     file_name = csv_file.filename
