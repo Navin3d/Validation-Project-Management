@@ -6,6 +6,7 @@ from fastapi.encoders import jsonable_encoder
 from datetime import datetime
 
 
+base = pd.to_datetime("2022-10-10")
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
@@ -48,9 +49,12 @@ async def upload_file(bactchId: str):
     return True
 
 def return_list_ifempty(df):
-    if df.empty:
+    try:
+        if df.empty:
+            return []
+        return df.to_dict(orient="records")
+    except Exception:
         return []
-    return df.to_dict(orient='records')
 
 @app.get("/process-batch/{bactchId}/")
 async def proces_batch(bactchId: str) -> dict:
@@ -80,7 +84,7 @@ async def proces_batch(bactchId: str) -> dict:
         task_df = await csv_to_df(task_file)
 
     parsed.append(handle_developer(developer_df))
-    parsed.append(handle_project(project_df))
+    parsed.append(handle_project(project_df, developer_df))
     parsed.append(handle_task(task_df, project_df, developer_df))
 
     returnValue = {
@@ -99,6 +103,7 @@ async def proces_batch(bactchId: str) -> dict:
         }
         returnValue.pop("errors")
     
+    print(returnValue)
     return jsonable_encoder(returnValue)
 
 
@@ -159,17 +164,19 @@ def handle_developer(developer_dataframe) -> dict:
         "duplicateIdEntry": return_list_ifempty(duplicate_user_ids)
     }
 
-def handle_project(project_dataframe):
+def handle_project(project_dataframe, developer_dataframe):
     is_valid = True
     null_rows = project_dataframe[project_dataframe.isnull().any(axis=1)]
     null_rows = null_rows[null_rows.index != 1]
+    missing_developer_ids = project_dataframe[~project_dataframe['createdBy'].isin(developer_dataframe['id'])]
     duplicate_project_ids = project_dataframe[project_dataframe['id'].duplicated(keep=False)]
     if len(null_rows) > 0 or len(duplicate_project_ids) > 0:
         is_valid = False
     return {
         "isProjectValid": is_valid,
         "nullRows": return_list_ifempty(null_rows),
-        "duplicateIdEntry": return_list_ifempty(duplicate_project_ids)
+        "duplicateIdEntry": return_list_ifempty(duplicate_project_ids),
+        "missingDevelopers": return_list_ifempty(missing_developer_ids),
     }
 
 def handle_task(task_dataframe, project_dataframe, developer_dataframe):
@@ -214,8 +221,8 @@ def handle_task(task_dataframe, project_dataframe, developer_dataframe):
         "nullRows": return_list_ifempty(null_rows),
         "missingProjects": return_list_ifempty(missing_project_ids),
         "missingDevelopers": return_list_ifempty(missing_assigned_to),
-        "invalidDeadlines": invalid_deadlines,
-        "inValidAssignment": invalid_assigned_to
+        "invalidDeadlines": return_list_ifempty(invalid_deadlines),
+        "inValidAssignment": return_list_ifempty(invalid_assigned_to)
     }
 
 def validate_email(objects):
