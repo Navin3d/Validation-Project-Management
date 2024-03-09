@@ -12,4 +12,6 @@ COPY server.py .
 
 EXPOSE 8000
 
+RUN mkdir -p ./files/prod/
+
 CMD ["python", "-m", "server"]
